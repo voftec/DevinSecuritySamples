@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Intentionally vulnerable sample app for educational purposes only.
 # Do not deploy in production.
 
-DATABASE = ':memory:'
+DATABASE = os.path.join(os.path.dirname(__file__), 'sample.db')
 
 
 def get_db():
