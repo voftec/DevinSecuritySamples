@@ -43,10 +43,11 @@ def index():
 def login():
     username = request.form.get('username')
     password = request.form.get('password')
-    # SQL injection
     conn = get_db()
-    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
-    user = conn.execute(query).fetchone()
+    user = conn.execute(
+        'SELECT * FROM users WHERE username = ? AND password = ?',
+        (username, password),
+    ).fetchone()
     conn.close()
     if user:
         return jsonify({'status': 'ok', 'role': user['role']})
