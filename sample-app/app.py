@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 import sqlite3
 import os
 
@@ -64,12 +65,18 @@ def admin_user(user_id):
     return jsonify({'error': 'not found'}), 404
 
 
+STATIC_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), 'static'))
+
+
 @app.route('/files')
 def files():
     filename = request.args.get('name', 'notes.txt')
-    # Path traversal
-    base_dir = os.path.dirname(__file__)
-    path = os.path.join(base_dir, 'static', filename)
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        return jsonify({'error': 'invalid filename'}), 400
+    path = os.path.realpath(os.path.join(STATIC_DIR, safe_name))
+    if os.path.commonpath([path, STATIC_DIR]) != STATIC_DIR or not os.path.isfile(path):
+        return jsonify({'error': 'not found'}), 404
     return send_file(path)
 
 
