@@ -1,0 +1,1 @@
+This is a safe demo static file used by the vulnerable `/files` endpoint.

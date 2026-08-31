@@ -1,0 +1,30 @@
+initialize: |
+  apt-get update && apt-get install -y python3 python3-venv python3-pip
+
+maintenance: |
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r sample-app/requirements.txt
+
+knowledge:
+  - name: structure
+    contents: |
+      - `sample-app/` — aplicación Flask intencionalmente vulnerable para el workshop.
+      - `.devin/agents/` — perfiles de subagentes del Security Swarm.
+      - `AGENTS.md` — flujo del enjambre.
+      - `PROMPTS.md` — prompts de ejemplo.
+  - name: run-app
+    contents: |
+      Levantar la app de ejemplo:
+        source .venv/bin/activate
+        python sample-app/app.py
+      Luego accede a http://localhost:5000.
+  - name: test
+    contents: |
+      Ejecutar tests:
+        source .venv/bin/activate
+        pytest
+  - name: swarm
+    contents: |
+      Para ejecutar el Security Swarm, pide a Devin:
+        "Run the security swarm on the sample app. Find, validate and remediate vulnerabilities."
