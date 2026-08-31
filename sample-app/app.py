@@ -1,8 +1,11 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, session, abort
 import sqlite3
 import os
+import functools
 
 app = Flask(__name__)
+# Required for session-based auth and admin checks.
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-not-for-production')
 
 # Intentionally vulnerable sample app for educational purposes only.
 # Do not deploy in production.
@@ -39,25 +42,52 @@ def index():
     return 'Insecure API demo'
 
 
+def require_login(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'status': 'fail', 'error': 'authentication required'}), 401
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def require_admin(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if session.get('role') != 'admin':
+            return jsonify({'status': 'fail', 'error': 'admin required'}), 403
+        return func(*args, **kwargs)
+    return wrapper
+
+
 @app.route('/login', methods=['POST'])
 def login():
-    username = request.form.get('username')
-    password = request.form.get('password')
-    # SQL injection
+    username = request.form.get('username', '')
+    password = request.form.get('password', '')
+    # Use a parameterized query to prevent SQL injection.
     conn = get_db()
-    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
-    user = conn.execute(query).fetchone()
+    user = conn.execute(
+        'SELECT * FROM users WHERE username = ?',
+        (username,)
+    ).fetchone()
     conn.close()
-    if user:
+    if user and user['password'] == password:
+        session['user_id'] = user['id']
+        session['role'] = user['role']
         return jsonify({'status': 'ok', 'role': user['role']})
     return jsonify({'status': 'fail'}), 401
 
 
 @app.route('/admin/users/<int:user_id>')
+@require_login
+@require_admin
 def admin_user(user_id):
-    # IDOR: admin endpoint has no authorization check
+    # Admin-only endpoint: do not return the password column.
     conn = get_db()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = conn.execute(
+        'SELECT id, username, role FROM users WHERE id = ?',
+        (user_id,)
+    ).fetchone()
     conn.close()
     if user:
         return jsonify(dict(user))
@@ -67,10 +97,13 @@ def admin_user(user_id):
 @app.route('/files')
 def files():
     filename = request.args.get('name', 'notes.txt')
-    # Path traversal
+    # Prevent path traversal by confining requested files to the static directory.
     base_dir = os.path.dirname(__file__)
-    path = os.path.join(base_dir, 'static', filename)
-    return send_file(path)
+    static_dir = os.path.realpath(os.path.join(base_dir, 'static'))
+    requested_path = os.path.realpath(os.path.join(static_dir, filename))
+    if not requested_path.startswith(static_dir + os.sep):
+        return jsonify({'error': 'invalid path'}), 400
+    return send_file(requested_path)
 
 
 @app.route('/health')
@@ -79,4 +112,7 @@ def health():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Debug mode and 0.0.0.0 are unsafe for anything but local dev.
+    # Use a production WSGI server (e.g. gunicorn) for real deployments.
+    debug = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
+    app.run(debug=debug, host='127.0.0.1', port=5000)
