@@ -1,13 +1,17 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, session
+from functools import wraps
 import sqlite3
 import os
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(32)
 
 # Intentionally vulnerable sample app for educational purposes only.
 # Do not deploy in production.
 
 DATABASE = os.path.join(os.path.dirname(__file__), 'sample.db')
+
+PUBLIC_USER_FIELDS = ('id', 'username', 'role')
 
 
 def get_db():
@@ -34,6 +38,18 @@ def init_db():
     conn.close()
 
 
+def require_admin(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not session.get('user_id'):
+            return jsonify({'error': 'authentication required'}), 401
+        if session.get('role') != 'admin':
+            return jsonify({'error': 'forbidden'}), 403
+        return view(*args, **kwargs)
+
+    return wrapper
+
+
 @app.route('/')
 def index():
     return 'Insecure API demo'
@@ -49,18 +65,29 @@ def login():
     user = conn.execute(query).fetchone()
     conn.close()
     if user:
+        session['user_id'] = user['id']
+        session['role'] = user['role']
         return jsonify({'status': 'ok', 'role': user['role']})
+    session.clear()
     return jsonify({'status': 'fail'}), 401
 
 
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/admin/users/<int:user_id>')
+@require_admin
 def admin_user(user_id):
-    # IDOR: admin endpoint has no authorization check
     conn = get_db()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = conn.execute(
+        'SELECT id, username, role FROM users WHERE id = ?', (user_id,)
+    ).fetchone()
     conn.close()
     if user:
-        return jsonify(dict(user))
+        return jsonify({field: user[field] for field in PUBLIC_USER_FIELDS})
     return jsonify({'error': 'not found'}), 404
 
 
