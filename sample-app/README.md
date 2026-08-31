@@ -16,6 +16,11 @@ source ../.venv/bin/activate
 python app.py
 ```
 
+El servidor de desarrollo arranca sin `debug` y escucha solo en `127.0.0.1:5000`.
+Para cambiar la interfaz o el puerto usa `HOST` y `PORT` (por ejemplo
+`HOST=127.0.0.1 PORT=8080 python app.py`). Para exponerlo, usa un servidor WSGI
+de producción (gunicorn/uwsgi) detrás de un reverse proxy.
+
 ## Endpoints
 
 - `GET /`
